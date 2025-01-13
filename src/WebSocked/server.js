@@ -5,39 +5,56 @@ import cors from 'cors';
 
 const app = express();
 app.use(cors());
-
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:5173', // Frontend manzili
+    origin: 'http://localhost:5173',
     methods: ['GET', 'POST'],
   },
 });
 
-let connectedUsers = []; // Ulangan foydalanuvchilarni saqlash
+// Fake foydalanuvchilar (id, name, password)
+const fakeUsers = [
+  { id: 1, name: 'User 1', password: 'pass1' },
+  { id: 2, name: 'User 2', password: 'pass2' },
+  { id: 3, name: 'User 3', password: 'pass3' },
+  { id: 4, name: 'User 4', password: 'pass4' },
+  { id: 5, name: 'User 5', password: 'pass5' },
+];
+
+let connectedUsers = {}; // { socketId: { id, name } }
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Foydalanuvchini ro‘yxatga qo‘shish
-  connectedUsers.push(socket.id);
+  // Login event
+  socket.on('login', ({ userId, password }, callback) => {
+    const user = fakeUsers.find((u) => u.id === userId && u.password === password);
+    if (user) {
+      connectedUsers[socket.id] = { id: user.id, name: user.name };
+      console.log(`${user.name} logged in`);
+      callback({ success: true });
+    } else {
+      callback({ success: false, message: 'Invalid login credentials' });
+    }
+  });
 
-  // Tasodifiy foydalanuvchini ulash
+  // Tasodifiy foydalanuvchi topish
   socket.on('find_match', () => {
-    const otherUsers = connectedUsers.filter((id) => id !== socket.id);
+    const otherUsers = Object.keys(connectedUsers).filter((id) => id !== socket.id);
     if (otherUsers.length > 0) {
-      const randomUser = otherUsers[Math.floor(Math.random() * otherUsers.length)];
-      socket.emit('match_found', randomUser);
-      io.to(randomUser).emit('match_found', socket.id);
+      const randomSocketId = otherUsers[Math.floor(Math.random() * otherUsers.length)];
+      socket.emit('match_found', connectedUsers[randomSocketId]);
+      io.to(randomSocketId).emit('match_found', connectedUsers[socket.id]);
     } else {
       socket.emit('no_users');
     }
   });
 
-  // Ulashni to‘xtatish
+  // Ulanishni tugatish
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    connectedUsers = connectedUsers.filter((id) => id !== socket.id);
+    delete connectedUsers[socket.id];
   });
 });
 
